@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguimiento de Pedidos | Tostadora</title>
+    <!-- Tailwind CSS para diseño moderno -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- SDK de Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-stone-50 text-stone-800 font-sans min-h-screen flex flex-col justify-between">
+
+    <!-- Header -->
+    <header class="bg-stone-900 text-stone-100 py-6 text-center shadow-md">
+        <h1 class="text-2xl font-bold tracking-wider">RASTREO DE PEDIDOS</h1>
+        <p class="text-xs text-stone-400 mt-1">Consulta el estado actual de tu compra</p>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="max-w-md mx-auto p-6 w-full flex-grow">
+        
+        <!-- Input de búsqueda -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 mb-6">
+            <label for="trackingInput" class="block text-sm font-semibold mb-2 text-stone-700">Ingresa tu código de pedido:</label>
+            <div class="flex gap-2">
+                <input type="text" id="trackingInput" placeholder="Ej: VT-1001" class="w-full px-4 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-800 uppercase">
+                <button onclick="buscarPedido()" class="bg-stone-900 text-white px-5 py-2 rounded-lg font-medium hover:bg-stone-800 transition">Buscar</button>
+            </div>
+        </div>
+
+        <!-- Contenedor de Resultados (Oculto inicialmente) -->
+        <div id="resultContainer" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-stone-200">
+            <div class="border-b border-stone-100 pb-4 mb-4">
+                <p class="text-xs text-stone-400 uppercase font-bold tracking-wider">Orden para:</p>
+                <h2 id="clientName" class="text-lg font-bold text-stone-900">--</h2>
+                <p class="text-xs text-stone-500 mt-1">Contenido: <span id="orderItems" class="font-medium text-stone-700">--</span></p>
+                <p class="text-xs text-stone-500 mt-1">Entrega estimada: <span id="estDate" class="font-medium text-stone-700">--</span></p>
+            </div>
+
+            <h3 class="text-sm font-bold text-stone-800 mb-4">Estado del Proceso</h3>
+
+            <!-- Línea de Tiempo (Timeline) -->
+            <div class="space-y-6 relative border-l-2 border-stone-200 ml-3 pl-4">
+                
+                <!-- Paso 1: Recibido -->
+                <div class="relative" id="step-recibido">
+                    <div class="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200" id="dot-recibido"></div>
+                    <h4 class="text-sm font-bold text-stone-700">1. Pedido Recibido</h4>
+                    <p class="text-xs text-stone-500">Tu orden ha sido registrada en el sistema.</p>
+                </div>
+
+                <!-- Paso 2: Tueste / Producción -->
+                <div class="relative" id="step-tueste">
+                    <div class="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200" id="dot-tueste"></div>
+                    <h4 class="text-sm font-bold text-stone-700">2. En Proceso / Tueste</h4>
+                    <p class="text-xs text-stone-500">Tus granos están siendo tostados o preparados.</p>
+                </div>
+
+                <!-- Paso 3: Empacado -->
+                <div class="relative" id="step-empacado">
+                    <div class="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200" id="dot-empacado"></div>
+                    <h4 class="text-sm font-bold text-stone-700">3. Empacado</h4>
+                    <p class="text-xs text-stone-500">El producto ha sido sellado y etiquetado.</p>
+                </div>
+
+                <!-- Paso 4: En Ruta -->
+                <div class="relative" id="step-ruta">
+                    <div class="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200" id="dot-ruta"></div>
+                    <h4 class="text-sm font-bold text-stone-700">4. Despachado / En Ruta</h4>
+                    <p class="text-xs text-stone-500">El pedido va en camino a tu dirección.</p>
+                </div>
+
+                <!-- Paso 5: Entregado -->
+                <div class="relative" id="step-entregado">
+                    <div class="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200" id="dot-entregado"></div>
+                    <h4 class="text-sm font-bold text-stone-700">5. Entregado</h4>
+                    <p class="text-xs text-stone-500">¡Disfruta tu producto!</p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Mensaje de Error / No encontrado -->
+        <div id="errorMsg" class="hidden mt-4 p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl text-center">
+            No encontramos ningún pedido con ese código. Verifica los datos e intenta de nuevo.
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 text-xs text-stone-400 border-t border-stone-200">
+        Control de Operaciones &copy; 2026
+    </footer>
+
+    <!-- Lógica de conexión con la Base de Datos -->
+    <script>
+        // Configura tus credenciales de Supabase aquí
+        const SUPABASE_URL = 'https://TU_PROYECTO.supabase.co';
+        const SUPABASE_ANON_KEY = 'TU_ANON_KEY';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function buscarPedido() {
+            const code = document.getElementById('trackingInput').value.trim().toUpperCase();
+            const resultContainer = document.getElementById('resultContainer');
+            const errorMsg = document.getElementById('errorMsg');
+
+            if (!code) return;
+
+            // Consultar Supabase
+            const { data, error } = await _supabase
+                .from('orders')
+                .select('*')
+                .eq('tracking_code', code)
+                .single();
+
+            if (error || !data) {
+                resultContainer.classList.add('hidden');
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
+            // Si se encuentra el pedido, ocultar error y mostrar datos
+            errorMsg.classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+
+            document.getElementById('clientName').innerText = data.customer_name;
+            document.getElementById('orderItems').innerText = data.items_summary;
+            document.getElementById('estDate').innerText = data.estimated_date || 'Por definir';
+
+            actualizarTimeline(data.current_status);
+        }
+
+        function actualizarTimeline(statusActual) {
+            const estados = ['recibido', 'tueste', 'empacado', 'ruta', 'entregado'];
+            let activoAlcanzado = true;
+
+            estados.forEach((est) => {
+                const dot = document.getElementById(`dot-${est}`);
+                
+                if (est === statusActual) {
+                    activoAlcanzado = false;
+                    // Estilo para el paso activo actual
+                    dot.className = "absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-amber-600 border-2 border-white ring-4 ring-amber-100 animate-pulse";
+                } else if (activoAlcanzado) {
+                    // Pasos ya completados
+                    dot.className = "absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white ring-2 ring-emerald-100";
+                } else {
+                    // Pasos futuros
+                    dot.className = "absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-stone-300 border-2 border-white ring-2 ring-stone-200";
+                }
+            });
+        }
+    </script>
+</body>
+</html>
